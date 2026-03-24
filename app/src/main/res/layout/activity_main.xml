@@ -44,12 +44,26 @@
             android:layout_marginTop="8dp"
             android:text="@string/headtracking_unknown" />
 
+        <TextView
+            android:id="@+id/toolStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/tool_status_unknown" />
+
         <Button
             android:id="@+id/startServiceButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="Start Background Service" />
+
+        <Button
+            android:id="@+id/stopServiceButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Stop Background Service" />
 
         <Button
             android:id="@+id/ancCycleButton"
@@ -71,6 +85,33 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="Apply Root Bluetooth Patch" />
+
+        <TextView
+            android:id="@+id/settingsHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Settings"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Automatic play/pause" />
+
+            <Switch
+                android:id="@+id/autoPlayPauseToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>
