@@ -50,11 +50,11 @@ class BluetoothPatchManager {
             TMP_R2=/data/local/tmp/r2;
             URL_BASE=https://github.com/radareorg/radare2/releases/latest/download;
             if command -v curl >/dev/null 2>&1; then
-              (curl -fsSL "$URL_BASE/r2-static-arm64" -o "$TMP_R2" || curl -fsSL "$URL_BASE/r2-static-aarch64" -o "$TMP_R2") >/dev/null 2>&1 || true;
+              (curl -fsSL "${'$'}URL_BASE/r2-static-arm64" -o "${'$'}TMP_R2" || curl -fsSL "${'$'}URL_BASE/r2-static-aarch64" -o "${'$'}TMP_R2") >/dev/null 2>&1 || true;
             elif command -v wget >/dev/null 2>&1; then
-              (wget -qO "$TMP_R2" "$URL_BASE/r2-static-arm64" || wget -qO "$TMP_R2" "$URL_BASE/r2-static-aarch64") >/dev/null 2>&1 || true;
+              (wget -qO "${'$'}TMP_R2" "${'$'}URL_BASE/r2-static-arm64" || wget -qO "${'$'}TMP_R2" "${'$'}URL_BASE/r2-static-aarch64") >/dev/null 2>&1 || true;
             fi;
-            chmod +x "$TMP_R2" >/dev/null 2>&1 || true;
+            chmod +x "${'$'}TMP_R2" >/dev/null 2>&1 || true;
           fi;
         fi;
         command -v r2 >/dev/null 2>&1 || [ -x /data/local/tmp/r2 ]
