@@ -105,7 +105,7 @@ class BluetoothPatchManager {
             val result = runCatching { resolvePatchTargets(path) }.getOrElse { error ->
                 hadInspectionError = true
                 Log.w(TAG, "Skipping $path: ${error.message}", error)
-                return@forEach null
+                return@forEach
             } ?: return@forEach
             if (result.targets.isNotEmpty()) return result
         }
