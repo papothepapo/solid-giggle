@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">AirBridge</string>
+    <string name="app_title">AirBridge Controller</string>
+    <string name="connection_unknown">Connection: Idle</string>
+    <string name="anc_mode_unknown">ANC Mode: Unknown</string>
+    <string name="battery_unknown">Battery: --</string>
+    <string name="headtracking_unknown">Head Tracking: --</string>
+</resources>
