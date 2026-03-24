@@ -5,4 +5,5 @@
     <string name="anc_mode_unknown">ANC Mode: Unknown</string>
     <string name="battery_unknown">Battery: --</string>
     <string name="headtracking_unknown">Head Tracking: --</string>
+    <string name="tool_status_unknown">Tools: not checked</string>
 </resources>

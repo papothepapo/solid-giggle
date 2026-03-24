@@ -67,11 +67,27 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        binding.autoPlayPauseToggle.isChecked = prefs.getBoolean(KEY_AUTO_PLAY_PAUSE, true)
+        binding.autoPlayPauseToggle.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(KEY_AUTO_PLAY_PAUSE, isChecked).apply()
+            Toast.makeText(
+                this,
+                if (isChecked) "Automatic play/pause enabled" else "Automatic play/pause disabled",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
         binding.startServiceButton.setOnClickListener {
             val serviceIntent = Intent(this, AirPodsService::class.java)
             ContextCompat.startForegroundService(this, serviceIntent)
             binding.connectionStatus.text = "Connection: service started"
             startBleScan()
+        }
+
+        binding.stopServiceButton.setOnClickListener {
+            stopService(Intent(this, AirPodsService::class.java))
+            binding.connectionStatus.text = "Connection: service stopped"
         }
 
         binding.ancCycleButton.setOnClickListener {
@@ -87,8 +103,10 @@ class MainActivity : AppCompatActivity() {
 
         binding.applyPatchButton.setOnClickListener {
             uiScope.launch {
+                binding.toolStatus.text = "Tools: validating root + r2 availability"
                 val result = bluetoothPatchManager.applyPatch()
                 Toast.makeText(this@MainActivity, result.message, Toast.LENGTH_LONG).show()
+                binding.toolStatus.text = "Tools: ${if (result.success) "ready" else "issue detected"}"
             }
         }
 
@@ -133,5 +151,10 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(packetReceiver)
         uiScope.cancel()
         super.onDestroy()
+    }
+
+    companion object {
+        private const val PREFS_NAME = "airbridge_settings"
+        private const val KEY_AUTO_PLAY_PAUSE = "auto_play_pause"
     }
 }

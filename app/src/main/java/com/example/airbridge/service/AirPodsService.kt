@@ -3,6 +3,7 @@ package com.example.airbridge.service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -14,6 +15,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.example.airbridge.R
 import com.example.airbridge.aap.AapProtocol
 import com.example.airbridge.aap.AapSocketClient
 import com.example.airbridge.aap.AancController
@@ -50,6 +52,11 @@ class AirPodsService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_SERVICE) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         connectAndListen(intent?.getStringExtra(EXTRA_DEVICE_ADDRESS))
         return START_STICKY
     }
@@ -90,6 +97,7 @@ class AirPodsService : Service() {
 
     override fun onDestroy() {
         unregisterReceiver(commandReceiver)
+        listenJob?.cancel()
         socketClient.close()
         serviceScope.cancel()
         super.onDestroy()
@@ -98,11 +106,20 @@ class AirPodsService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun buildNotification(content: String): Notification {
+        val stopIntent = Intent(this, AirPodsService::class.java).setAction(ACTION_STOP_SERVICE)
+        val stopPendingIntent = PendingIntent.getService(
+            this,
+            1,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setSmallIcon(R.drawable.ic_stat_airbridge)
             .setContentTitle("AirBridge")
             .setContentText(content)
             .setOngoing(true)
+            .addAction(0, "Stop", stopPendingIntent)
             .build()
     }
 
@@ -121,6 +138,7 @@ class AirPodsService : Service() {
     companion object {
         const val CHANNEL_ID = "airbridge_service"
         const val ACTION_PACKET = "com.example.airbridge.PACKET"
+        const val ACTION_STOP_SERVICE = "com.example.airbridge.STOP_SERVICE"
         const val EXTRA_PACKET = "extra_packet"
         const val EXTRA_DEVICE_ADDRESS = "extra_device_address"
     }
