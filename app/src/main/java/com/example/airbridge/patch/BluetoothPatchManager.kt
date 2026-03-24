@@ -60,6 +60,10 @@ class BluetoothPatchManager {
 
     private fun detectLibraryPaths(): List<String> {
         val explicitCandidates = listOf(
+            "/apex/com.android.btservices/lib64/libbluetooth_jni.so",
+            "/apex/com.android.btservices/lib/libbluetooth_jni.so",
+            "/apex/com.android.btservices/lib64/libbluetooth_mtk.so",
+            "/apex/com.android.btservices/lib/libbluetooth_mtk.so",
             "/vendor/lib64/hw/android.hardware.bluetooth@1.0-impl-mediatek.so",
             "/vendor/lib64/hw/android.hardware.bluetooth@1.0.impl-mediatek.so",
             "/vendor/lib64/hw/android.hardware.bluetooth-service.mediatek.so",
@@ -75,6 +79,8 @@ class BluetoothPatchManager {
         )
 
         val dynamicCandidates = listOf(
+            "/apex/com.android.btservices/lib64",
+            "/apex/com.android.btservices/lib",
             "/vendor/lib64/hw",
             "/vendor/lib/hw",
             "/vendor/lib64",
@@ -87,7 +93,9 @@ class BluetoothPatchManager {
                 ?.filter { it.isFile }
                 ?.filter {
                     val name = it.name.lowercase()
-                    name.contains("bluetooth") && name.contains("mediatek") && name.endsWith(".so")
+                    name.endsWith(".so") &&
+                        name.contains("bluetooth") &&
+                        (name.contains("mediatek") || name.contains("mtk") || name.contains("jni"))
                 }
                 ?.map { it.absolutePath }
                 ?.toList()
@@ -191,6 +199,7 @@ private object ElfSymbolResolver {
     private const val ELFDATA2LSB = 1
     private const val PT_LOAD = 1
     private const val SHT_DYNSYM = 11
+    private const val SHT_SYMTAB = 2
 
     fun findSymbolFileOffsets(path: String, symbolNames: Set<String>): SymbolLookupResult {
         if (symbolNames.isEmpty()) return SymbolLookupResult(ElfArch.ELF64, emptyMap())
@@ -300,39 +309,46 @@ private object ElfSymbolResolver {
         loadSegments: List<Segment>,
         symbolNames: Set<String>
     ): Map<String, Long> {
-        val dynSymIndex = sections.indexOfFirst { it.type == SHT_DYNSYM }
-        if (dynSymIndex == -1) return emptyMap()
-
-        val dynSym = sections[dynSymIndex]
-        val strTab = sections.getOrNull(dynSym.link)
-            ?: return emptyMap()
-        if (dynSym.entsize <= 0L) return emptyMap()
-
-        val symbolCount = (dynSym.size / dynSym.entsize).toInt()
         val results = mutableMapOf<String, Long>()
-        for (i in 0 until symbolCount) {
-            val symOff = dynSym.offset + i * dynSym.entsize
-            file.seek(symOff)
-            val stName = readInt(file)
-            file.skipBytes(1) // st_info
-            file.skipBytes(1) // st_other
-            file.skipBytes(2) // st_shndx
-            val stValue = when (dynSym.entsize) {
-                24L -> readLong(file).also { file.skipBytes(8) } // ELF64
-                16L -> {
-                    val value = readInt(file).toLong() and 0xFFFFFFFFL
-                    file.skipBytes(4) // st_size
-                    value
-                }
-                else -> continue
-            }
 
-            val name = readStringAt(file, strTab.offset + stName.toLong(), strTab.size)
-            if (name !in symbolNames) continue
-            val fileOffset = vaddrToFileOffset(stValue, loadSegments) ?: continue
-            results[name] = fileOffset
-            if (results.size == symbolNames.size) break
+        val symbolSections = sections.filter { it.type == SHT_DYNSYM || it.type == SHT_SYMTAB }
+        for (symbolSection in symbolSections) {
+            val strTab = sections.getOrNull(symbolSection.link) ?: continue
+            if (symbolSection.entsize <= 0L) continue
+
+            val symbolCount = (symbolSection.size / symbolSection.entsize).toInt()
+            for (i in 0 until symbolCount) {
+                val symOff = symbolSection.offset + i * symbolSection.entsize
+                file.seek(symOff)
+                val stName = readInt(file)
+                file.skipBytes(1) // st_info
+                file.skipBytes(1) // st_other
+                file.skipBytes(2) // st_shndx
+                val stValue = when (symbolSection.entsize) {
+                    24L -> readLong(file).also { file.skipBytes(8) } // ELF64
+                    16L -> {
+                        val value = readInt(file).toLong() and 0xFFFFFFFFL
+                        file.skipBytes(4) // st_size
+                        value
+                    }
+                    else -> continue
+                }
+
+                if (stName == 0) continue
+                val name = readStringAt(file, strTab.offset + stName.toLong(), strTab.size)
+                if (name.isBlank()) continue
+
+                val matchedTarget = symbolNames.firstOrNull { target ->
+                    name == target || name.startsWith("$target.")
+                } ?: continue
+
+                if (results.containsKey(matchedTarget)) continue
+                val fileOffset = vaddrToFileOffset(stValue, loadSegments) ?: continue
+                results[matchedTarget] = fileOffset
+                if (results.size == symbolNames.size) return results
+            }
         }
+
         return results
     }
 
