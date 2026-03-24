@@ -3,7 +3,6 @@ package com.example.airbridge.patch
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.BufferedWriter
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -15,7 +14,7 @@ class BluetoothPatchManager {
         if (candidates.isEmpty()) {
             return@withContext PatchResult(
                 success = false,
-                message = "No known MediaTek Bluetooth implementation library found."
+                message = "No supported Bluetooth library found. Expected at least $PREFERRED_LIBRARY_PATH."
             )
         }
 
@@ -28,11 +27,29 @@ class BluetoothPatchManager {
 
         val patchScript = buildShellPatchScript(libraryPath, patchTargets)
 
-        val process = runCatching { runAsRoot(patchScript) }.getOrElse {
+        val rootProbe = runCatching { runAsRoot("id -u") }.getOrElse {
             Log.e(TAG, "Failed to start root patch process", it)
             return@withContext PatchResult(
                 false,
-                "Failed to start root patch process. Ensure root manager is installed and root access is granted."
+                "Root shell could not be started. Verify Magisk/su is installed and enabled."
+            )
+        }
+        val probeExit = rootProbe.waitFor()
+        val probeOut = rootProbe.inputStream.bufferedReader().readText().trim()
+        if (probeExit != 0 || probeOut != "0") {
+            val probeErr = rootProbe.errorStream.bufferedReader().readText().trim()
+            val details = listOf(probeOut, probeErr).filter { it.isNotBlank() }.joinToString(" | ")
+            return@withContext PatchResult(
+                false,
+                "Root access failed ($details). Open Magisk, allow AirBridge superuser access, and disable denylist hiding for this app."
+            )
+        }
+
+        val process = runCatching { runAsRoot(patchScript) }.getOrElse {
+            Log.e(TAG, "Failed to execute root patch script", it)
+            return@withContext PatchResult(
+                false,
+                "Failed to execute root patch script. Ensure Magisk granted root access."
             )
         }
 
@@ -47,6 +64,8 @@ class BluetoothPatchManager {
             val reason = when {
                 details.contains("permission denied", ignoreCase = true) ->
                     "Root permission denied. Approve the prompt in your root manager and try again."
+                details.contains("not allowed", ignoreCase = true) || details.contains("denied", ignoreCase = true) ->
+                    "Magisk denied the request. Open Magisk > Superuser and grant access to AirBridge."
                 details.contains("not found", ignoreCase = true) ->
                     "Required root tooling is missing. Ensure `su`, `dd`, and `mount` are available."
                 else -> details
@@ -72,20 +91,25 @@ class BluetoothPatchManager {
     }
 
     private fun runAsRoot(command: String): Process {
-        val process = ProcessBuilder("su")
-            .redirectErrorStream(false)
-            .start()
-
-        BufferedWriter(process.outputStream.writer()).use { shell ->
-            shell.write("$command\n")
-            shell.write("exit\n")
-            shell.flush()
+        var lastError: Throwable? = null
+        ROOT_SHELL_CANDIDATES.forEach { candidate ->
+            runCatching {
+                return ProcessBuilder(candidate + command)
+                    .redirectErrorStream(false)
+                    .start()
+            }.onFailure { err ->
+                lastError = err
+            }
         }
-        return process
+        throw IllegalStateException(
+            "No usable su command found. Tried: ${ROOT_SHELL_CANDIDATES.joinToString { it.joinToString(" ") }}",
+            lastError
+        )
     }
 
     private fun detectLibraryPaths(): List<String> {
         val explicitCandidates = listOf(
+            PREFERRED_LIBRARY_PATH,
             "/apex/com.android.btservices/lib64/libbluetooth.so",
             "/apex/com.android.btservices/lib/libbluetooth.so",
             "/apex/com.android.btservices/lib64/libbluetooth_jni.so",
@@ -104,7 +128,6 @@ class BluetoothPatchManager {
             "/vendor/lib/hw/bluetooth.default.so",
             "/vendor/lib64/libbluetooth_mtk.so",
             "/vendor/lib/libbluetooth_mtk.so",
-            "/system/lib64/libbluetooth.so",
             "/system/lib/libbluetooth.so",
             "/system/lib64/libbluetooth_mtk.so",
             "/system/lib/libbluetooth_mtk.so",
@@ -198,6 +221,14 @@ class BluetoothPatchManager {
 
     companion object {
         private const val TAG = "BluetoothPatchManager"
+        private const val PREFERRED_LIBRARY_PATH = "/system/lib64/libbluetooth.so"
+        private val ROOT_SHELL_CANDIDATES = listOf(
+            listOf("/system/bin/su", "-c"),
+            listOf("su", "-c"),
+            listOf("/system/xbin/su", "-c"),
+            listOf("/sbin/su", "-c"),
+            listOf("su", "0", "sh", "-c")
+        )
         private val TARGET_SYMBOLS = setOf(
             "l2c_fcr_chk_chan_modes",
             "l2cu_send_peer_info_req"
