@@ -6,10 +6,10 @@ AirBridge is an Android 9+ app scaffold for controlling AirPods family features 
 
 - AAP packet framing and command builders:
   - handshake, notifications, ANC mode control, rename, head-tracking start, proximity-key request.
-- L2CAP client wrapper (`createInsecureL2capChannel`) for `PSM 0x1001`.
+- L2CAP client wrapper with hidden-API fallback order (`createInsecureL2capSocket` / `createL2capSocket` / channel APIs) for `PSM 0x1001`.
 - BLE manufacturer-data parser for Apple `0x004C` proximity payloads (`0x07` prefix).
 - AES-128 ECB decryptor for encrypted battery sub-payload.
-- Root patch manager that applies the requested Mediatek symbol patches through radare2.
+- Root patch manager that resolves/patches Mediatek and AOSP Bluetooth stack symbols directly inside discovered Bluetooth libraries.
 - Foreground background service for persistent connection and packet streaming.
 - Basic controller UI for service startup, ANC cycling, key request, and patch invocation.
 - GitHub Actions CI workflow that assembles a debug APK.

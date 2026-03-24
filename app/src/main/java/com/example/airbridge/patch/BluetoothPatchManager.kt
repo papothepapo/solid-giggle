@@ -86,22 +86,32 @@ class BluetoothPatchManager {
 
     private fun detectLibraryPaths(): List<String> {
         val explicitCandidates = listOf(
+            "/apex/com.android.btservices/lib64/libbluetooth.so",
+            "/apex/com.android.btservices/lib/libbluetooth.so",
             "/apex/com.android.btservices/lib64/libbluetooth_jni.so",
             "/apex/com.android.btservices/lib/libbluetooth_jni.so",
             "/apex/com.android.btservices/lib64/libbluetooth_mtk.so",
             "/apex/com.android.btservices/lib/libbluetooth_mtk.so",
+            "/vendor/lib64/libbluetooth.so",
+            "/vendor/lib/libbluetooth.so",
             "/vendor/lib64/hw/android.hardware.bluetooth@1.0-impl-mediatek.so",
             "/vendor/lib64/hw/android.hardware.bluetooth@1.0.impl-mediatek.so",
             "/vendor/lib64/hw/android.hardware.bluetooth-service.mediatek.so",
+            "/vendor/lib64/hw/bluetooth.default.so",
             "/vendor/lib/hw/android.hardware.bluetooth@1.0-impl-mediatek.so",
             "/vendor/lib/hw/android.hardware.bluetooth@1.0.impl-mediatek.so",
             "/vendor/lib/hw/android.hardware.bluetooth-service.mediatek.so",
+            "/vendor/lib/hw/bluetooth.default.so",
             "/vendor/lib64/libbluetooth_mtk.so",
             "/vendor/lib/libbluetooth_mtk.so",
+            "/system/lib64/libbluetooth.so",
+            "/system/lib/libbluetooth.so",
             "/system/lib64/libbluetooth_mtk.so",
             "/system/lib/libbluetooth_mtk.so",
             "/system/lib64/libbluetooth_jni.so",
-            "/system/lib/libbluetooth_jni.so"
+            "/system/lib/libbluetooth_jni.so",
+            "/system/lib64/hw/bluetooth.default.so",
+            "/system/lib/hw/bluetooth.default.so"
         )
 
         val dynamicCandidates = listOf(
@@ -121,7 +131,7 @@ class BluetoothPatchManager {
                     val name = it.name.lowercase()
                     name.endsWith(".so") &&
                         name.contains("bluetooth") &&
-                        (name.contains("mediatek") || name.contains("mtk") || name.contains("jni"))
+                        (name.contains("mediatek") || name.contains("mtk") || name.contains("jni") || name == "libbluetooth.so" || name == "bluetooth.default.so")
                 }
                 ?.map { it.absolutePath }
                 ?.toList()
@@ -365,7 +375,10 @@ private object ElfSymbolResolver {
                 if (name.isBlank()) continue
 
                 val matchedTarget = symbolNames.firstOrNull { target ->
-                    name == target || name.startsWith("$target.")
+                    name == target ||
+                        name.startsWith("$target.") ||
+                        name.startsWith("_$target") ||
+                        name.contains(target)
                 } ?: continue
 
                 if (results.containsKey(matchedTarget)) continue
