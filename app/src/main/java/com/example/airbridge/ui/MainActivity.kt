@@ -103,7 +103,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.applyPatchButton.setOnClickListener {
             uiScope.launch {
-                binding.toolStatus.text = "Tools: validating root + r2 availability"
+                binding.toolStatus.text = "Tools: validating root + Bluetooth stack targets"
                 val result = bluetoothPatchManager.applyPatch()
                 Toast.makeText(this@MainActivity, result.message, Toast.LENGTH_LONG).show()
                 binding.toolStatus.text = "Tools: ${if (result.success) "ready" else "issue detected"}"

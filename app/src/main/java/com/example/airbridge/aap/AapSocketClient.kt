@@ -15,17 +15,33 @@ class AapSocketClient {
     private var output: OutputStream? = null
 
     suspend fun connect(device: BluetoothDevice, psm: Int = 0x1001): Boolean = withContext(Dispatchers.IO) {
-        runCatching {
-            val createL2capSocketMethod: Method = device.javaClass.getMethod("createInsecureL2capChannel", Int::class.javaPrimitiveType)
-            val created = createL2capSocketMethod.invoke(device, psm) as BluetoothSocket
-            created.connect()
-            socket = created
-            input = created.inputStream
-            output = created.outputStream
-            true
-        }.onFailure {
-            Log.e(TAG, "Failed to connect to AAP PSM $psm", it)
-        }.getOrDefault(false)
+        val methods = listOf(
+            "createInsecureL2capSocket",
+            "createL2capSocket",
+            "createInsecureL2capChannel",
+            "createL2capChannel"
+        )
+
+        methods.forEach { methodName ->
+            val connected = runCatching {
+                val method: Method = device.javaClass.getMethod(methodName, Int::class.javaPrimitiveType)
+                val created = method.invoke(device, psm) as BluetoothSocket
+                created.connect()
+                socket = created
+                input = created.inputStream
+                output = created.outputStream
+                Log.i(TAG, "Connected to AAP PSM $psm using $methodName")
+                true
+            }.onFailure {
+                Log.w(TAG, "L2CAP connect attempt failed via $methodName", it)
+                close()
+            }.getOrDefault(false)
+
+            if (connected) return@withContext true
+        }
+
+        Log.e(TAG, "Failed to connect to AAP PSM $psm using all known hidden/public L2CAP APIs")
+        false
     }
 
     suspend fun send(packet: ByteArray): Boolean = withContext(Dispatchers.IO) {
