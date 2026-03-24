@@ -3,6 +3,7 @@ package com.example.airbridge.patch
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.BufferedWriter
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -27,8 +28,13 @@ class BluetoothPatchManager {
 
         val patchScript = buildShellPatchScript(libraryPath, patchTargets)
 
-        val process = runCatching { Runtime.getRuntime().exec(arrayOf("su", "-c", patchScript)) }.getOrNull()
-            ?: return@withContext PatchResult(false, "Failed to start root patch process. Ensure root access is granted.")
+        val process = runCatching { runAsRoot(patchScript) }.getOrElse {
+            Log.e(TAG, "Failed to start root patch process", it)
+            return@withContext PatchResult(
+                false,
+                "Failed to start root patch process. Ensure root manager is installed and root access is granted."
+            )
+        }
 
         val exitCode = process.waitFor()
         if (exitCode == 0) {
@@ -38,7 +44,14 @@ class BluetoothPatchManager {
             val output = process.inputStream.bufferedReader().readText().trim()
             val details = listOf(error, output).filter { it.isNotBlank() }.joinToString("\n")
             Log.e(TAG, "Patch failed [$exitCode]: $details")
-            PatchResult(false, "Patch failed with exit code $exitCode. $details")
+            val reason = when {
+                details.contains("permission denied", ignoreCase = true) ->
+                    "Root permission denied. Approve the prompt in your root manager and try again."
+                details.contains("not found", ignoreCase = true) ->
+                    "Required root tooling is missing. Ensure `su`, `dd`, and `mount` are available."
+                else -> details
+            }
+            PatchResult(false, "Patch failed with exit code $exitCode. $reason")
         }
     }
 
@@ -56,6 +69,19 @@ class BluetoothPatchManager {
             [ -w '$libraryPath' ] || chmod u+w '$libraryPath' >/dev/null 2>&1 || true;
             $writes
         """.trimIndent().replace("\n", " ")
+    }
+
+    private fun runAsRoot(command: String): Process {
+        val process = ProcessBuilder("su")
+            .redirectErrorStream(false)
+            .start()
+
+        BufferedWriter(process.outputStream.writer()).use { shell ->
+            shell.write("$command\n")
+            shell.write("exit\n")
+            shell.flush()
+        }
+        return process
     }
 
     private fun detectLibraryPaths(): List<String> {
