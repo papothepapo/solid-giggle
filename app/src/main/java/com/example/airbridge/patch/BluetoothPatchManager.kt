@@ -11,22 +11,20 @@ class BluetoothPatchManager {
             message = "No known MediaTek Bluetooth implementation library found."
         )
 
-        val command = buildString {
-            append("su -c '")
+        val radareScript = "aa; s sym.l2c_fcr_chk_chan_modes; wa mov w0, 1; ret; s sym.l2cu_send_peer_info_req; wa ret; wq"
+        val patchScript = buildString {
             append(installAndResolveR2Script())
-            append(" && R2_PATH=\\\"$(command -v r2 || echo /data/local/tmp/r2)\\\" && ")
-            append("\$R2_PATH -q -w ")
+            append(" || exit 127; ")
+            append("R2_PATH=\\\"$(command -v r2 || echo /data/local/tmp/r2)\\\"; ")
+            append("\\\"\$R2_PATH\\\" -q -w \\\"")
             append(libraryPath)
-            append(" -c \\\"")
-            append("aa; ")
-            append("s sym.l2c_fcr_chk_chan_modes; wa mov w0, 1; ret; ")
-            append("s sym.l2cu_send_peer_info_req; wa ret; ")
-            append("wq\\\"")
+            append("\\\" -c '")
+            append(radareScript)
             append("'")
         }
 
-        val process = runCatching { Runtime.getRuntime().exec(arrayOf("sh", "-c", command)) }.getOrNull()
-            ?: return@withContext PatchResult(false, "Failed to spawn patch process.")
+        val process = runCatching { Runtime.getRuntime().exec(arrayOf("su", "-c", patchScript)) }.getOrNull()
+            ?: return@withContext PatchResult(false, "Failed to start root patch process. Ensure root access is granted.")
 
         val exitCode = process.waitFor()
         if (exitCode == 0) {
