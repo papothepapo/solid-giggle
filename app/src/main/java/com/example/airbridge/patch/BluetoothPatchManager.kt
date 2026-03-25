@@ -27,25 +27,16 @@ class BluetoothPatchManager {
 
         val patchScript = buildShellPatchScript(libraryPath, patchTargets)
 
-        val rootProbe = runCatching { runAsRoot("id -u") }.getOrElse {
-            Log.e(TAG, "Failed to start root patch process", it)
-            return@withContext PatchResult(
-                false,
-                "Root shell could not be started. Verify Magisk/su is installed and enabled."
-            )
-        }
-        val probeExit = rootProbe.waitFor()
-        val probeOut = rootProbe.inputStream.bufferedReader().readText().trim()
-        if (probeExit != 0 || probeOut != "0") {
-            val probeErr = rootProbe.errorStream.bufferedReader().readText().trim()
-            val details = listOf(probeOut, probeErr).filter { it.isNotBlank() }.joinToString(" | ")
+        val rootCheck = verifyRootAccess()
+        if (rootCheck.command == null) {
+            val details = rootCheck.attempts.joinToString(" | ")
             return@withContext PatchResult(
                 false,
                 "Root access failed ($details). Open Magisk, allow AirBridge superuser access, and disable denylist hiding for this app."
             )
         }
 
-        val process = runCatching { runAsRoot(patchScript) }.getOrElse {
+        val process = runCatching { runAsRoot(rootCheck.command, patchScript) }.getOrElse {
             Log.e(TAG, "Failed to execute root patch script", it)
             return@withContext PatchResult(
                 false,
@@ -90,13 +81,42 @@ class BluetoothPatchManager {
         """.trimIndent().replace("\n", " ")
     }
 
+    private fun verifyRootAccess(): RootAccessCheck {
+        val attempts = mutableListOf<String>()
+        ROOT_SHELL_CANDIDATES.forEach { candidate ->
+            val probe = runCatching { runAsRoot(candidate, "id -u") }.getOrElse { err ->
+                attempts += "${candidate.joinToString(" ")}: ${err.message ?: "failed to start"}"
+                return@forEach
+            }
+            val exitCode = probe.waitFor()
+            val stdout = probe.inputStream.bufferedReader().readText().trim()
+            val stderr = probe.errorStream.bufferedReader().readText().trim()
+            if (exitCode == 0 && stdout == "0") {
+                return RootAccessCheck(candidate, attempts)
+            }
+
+            val details = listOf(stdout, stderr).filter { it.isNotBlank() }.joinToString(", ")
+            attempts += "${candidate.joinToString(" ")}: exit=$exitCode${if (details.isNotBlank()) ", $details" else ""}"
+        }
+        return RootAccessCheck(null, attempts)
+    }
+
+    private fun runAsRoot(rootCommand: List<String>, command: String): Process {
+        return ProcessBuilder(rootCommand + command)
+            .redirectErrorStream(false)
+            .start()
+    }
+
+    private data class RootAccessCheck(
+        val command: List<String>?,
+        val attempts: List<String>
+    )
+
     private fun runAsRoot(command: String): Process {
         var lastError: Throwable? = null
         ROOT_SHELL_CANDIDATES.forEach { candidate ->
             runCatching {
-                return ProcessBuilder(candidate + command)
-                    .redirectErrorStream(false)
-                    .start()
+                return runAsRoot(candidate, command)
             }.onFailure { err ->
                 lastError = err
             }
