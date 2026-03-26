@@ -53,6 +53,8 @@ class BluetoothPatchManager {
             val details = listOf(error, output).filter { it.isNotBlank() }.joinToString("\n")
             Log.e(TAG, "Patch failed [$exitCode]: $details")
             val reason = when {
+                exitCode == 3 ->
+                    "Target Bluetooth library is still read-only. Use a root shell with mount-master support (Magisk su -mm/--mount-master)."
                 details.contains("permission denied", ignoreCase = true) ->
                     "Root permission denied. Approve the prompt in your root manager and try again."
                 details.contains("not allowed", ignoreCase = true) || details.contains("denied", ignoreCase = true) ->
@@ -74,9 +76,12 @@ class BluetoothPatchManager {
         }
 
         return """
+            mount -o rw,remount / >/dev/null 2>&1 || true;
+            mount -o rw,remount /apex >/dev/null 2>&1 || true;
             mount -o rw,remount /vendor >/dev/null 2>&1 || true;
             mount -o rw,remount /system >/dev/null 2>&1 || true;
             [ -w '$libraryPath' ] || chmod u+w '$libraryPath' >/dev/null 2>&1 || true;
+            [ -w '$libraryPath' ] || exit 3;
             $writes
         """.trimIndent().replace("\n", " ")
     }
@@ -243,6 +248,10 @@ class BluetoothPatchManager {
         private const val TAG = "BluetoothPatchManager"
         private const val PREFERRED_LIBRARY_PATH = "/system/lib64/libbluetooth.so"
         private val ROOT_SHELL_CANDIDATES = listOf(
+            listOf("/system/bin/su", "--mount-master", "-c"),
+            listOf("su", "--mount-master", "-c"),
+            listOf("/system/bin/su", "-mm", "-c"),
+            listOf("su", "-mm", "-c"),
             listOf("/system/bin/su", "-c"),
             listOf("su", "-c"),
             listOf("/system/xbin/su", "-c"),
@@ -433,7 +442,8 @@ private object ElfSymbolResolver {
                 } ?: continue
 
                 if (results.containsKey(matchedTarget)) continue
-                val fileOffset = vaddrToFileOffset(stValue, loadSegments) ?: continue
+                val normalizedValue = if (symbolSection.entsize == 16L) stValue and -2L else stValue
+                val fileOffset = vaddrToFileOffset(normalizedValue, loadSegments) ?: continue
                 results[matchedTarget] = fileOffset
                 if (results.size == symbolNames.size) return results
             }
